@@ -8,7 +8,22 @@ from matplotlib.ticker import FuncFormatter
 from scipy.optimize import minimize
 from numpy import linalg as LA
 import datetime as dt
-from bcb import sgs
+
+def get_bcb_series(codigo, start_date):
+    import pandas as pd
+    
+    url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados?formato=json&dataInicial={start_date.strftime('%d/%m/%Y')}"
+    
+    df = pd.read_json(url)
+    
+    if df.empty:
+        return pd.Series(dtype=float)
+    
+    df['data'] = pd.to_datetime(df['data'], dayfirst=True)
+    df['valor'] = df['valor'].astype(float)
+    df = df.set_index('data')
+    
+    return df['valor']
 
 # ============================================================
 # CONFIG
@@ -200,12 +215,14 @@ with tab1:
                 continue
             try:
                 sid = sgs_map[nome]
-                df_idx = sgs.get({nome: sid}, start=carteira_acc.index.min())
-                if df_idx.empty:
-                    continue
-                serie = df_idx.iloc[:, 0].astype(float) / 100.0
-                serie.index = pd.to_datetime(serie.index)
+                serie = get_bcb_series(sid, carteira_acc.index.min())
+
+                if serie.empty:
+                        continue
+
+                serie = serie / 100.0  # converte % para decimal
                 serie_acc = (1 + serie).cumprod().reindex(carteira_acc.index, method="ffill")
+
                 comparativo[nome] = serie_acc
             except Exception as e:
                 st.warning(f"Erro {nome}: {e}")
